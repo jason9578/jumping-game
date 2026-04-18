@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Jump Game - Dino Style</title>
+    <title>Jump Game</title>
     <style>
         body {
             text-align: center;
@@ -18,34 +18,114 @@
             margin-top: 10px;
             font-size: 18px;
         }
+        #comboDisplay {
+            margin-top: 5px;
+            font-size: 16px;
+            color: #e67e22;
+            font-weight: bold;
+        }
         #restartBtn {
             margin-top: 10px;
             padding: 6px 16px;
             font-size: 16px;
         }
+        .highscore-list {
+            margin-top: 15px;
+            text-align: center;
+            font-size: 14px;
+        }
+        .highscore-list span {
+            font-weight: bold;
+        }
+        .difficulty-selector {
+            margin-top: 15px;
+        }
+        .difficulty-selector label {
+            font-weight: bold;
+            margin-right: 8px;
+        }
+        select {
+            padding: 4px 8px;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
-    <h2>🐸 Jump Game</h2>
-    <p>💡 Press <strong>Left Mouse Button</strong> to jump (avoid red obstacles)</p>
+    <h2>Jump Game</h2>
+    <p><strong>Left Mouse Button</strong> or <strong>Space Bar</strong> to jump</p>
     <canvas id="gameCanvas" width="800" height="300"></canvas>
     <div id="info">
         Score: <span id="score">0</span> &nbsp;&nbsp;
         High Score: <span id="highScore">0</span>
     </div>
+    <div id="comboDisplay">
+        Combo: x<span id="combo">1</span>
+    </div>
     <button id="restartBtn">Restart</button>
+    
+    <div class="difficulty-selector">
+        <label for="difficultySelect">Difficulty:</label>
+        <select id="difficultySelect">
+            <option value="easy">Easy</option>
+            <option value="normal" selected>Normal</option>
+            <option value="hard">Hard</option>
+        </select>
+    </div>
+    
+    <div class="highscore-list">
+        Top 3 High Scores:<br>
+        <span id="top1">-</span> | <span id="top2">-</span> | <span id="top3">-</span>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Game state
+        // Difficulty settings
+        const difficultySettings = {
+            easy: { baseSpeed: 2.5, baseSpawnDelay: 130 },
+            normal: { baseSpeed: 3.5, baseSpawnDelay: 100 },
+            hard: { baseSpeed: 4.5, baseSpawnDelay: 80 }
+        };
+        
+        let currentDifficulty = 'normal';
+        let BASE_OBSTACLE_SPEED = difficultySettings.normal.baseSpeed;
+        let BASE_SPAWN_DELAY = difficultySettings.normal.baseSpawnDelay;
+        
+        const SCORE_INCREASE_RATE = 0.12;
+        const DIFFICULTY_SPEEDUP = 0.002;
+        const MIN_SPAWN_DELAY = 50;
+        
+        // Combo settings - new rule: +1 combo per 30 obstacles passed
+        let comboLevel = 1;
+        let obstaclesPassed = 0;
+        const OBSTACLES_PER_COMBO = 30;
+        const MAX_COMBO = 5;
+
         let gameRunning = true;
+        let paused = false;
         let score = 0;
         let highScore = localStorage.getItem('jumpHighScore') || 0;
         document.getElementById('highScore').innerText = highScore;
 
-        // Player
+        // Top 3 scores
+        let topScores = JSON.parse(localStorage.getItem('jumpTopScores')) || [0, 0, 0];
+        function updateTopScoresDisplay() {
+            topScores.sort((a,b) => b - a);
+            document.getElementById('top1').innerText = topScores[0] || 0;
+            document.getElementById('top2').innerText = topScores[1] || 0;
+            document.getElementById('top3').innerText = topScores[2] || 0;
+        }
+        function saveTopScores(newScore) {
+            topScores.push(newScore);
+            topScores.sort((a,b) => b - a);
+            topScores = topScores.slice(0,3);
+            localStorage.setItem('jumpTopScores', JSON.stringify(topScores));
+            updateTopScoresDisplay();
+        }
+        updateTopScoresDisplay();
+
+        // Player - higher jump
         const player = {
             x: 80,
             y: 230,
@@ -53,42 +133,66 @@
             height: 30,
             isJumping: false,
             ySpeed: 0,
-            gravity: 0.8,
-            jumpPower: -12
+            gravity: 0.5,
+            jumpPower: -11
         };
 
-        // Obstacles
         let obstacles = [];
-
-        // Obstacle spawn control
+        let powerups = [];
         let frameCounter = 0;
-        let nextObstacleFrames = 80;
+        let nextObstacleFrames = BASE_SPAWN_DELAY;
+        let currentObstacleSpeed = BASE_OBSTACLE_SPEED;
 
         const groundY = 230;
 
         function restartGame() {
             gameRunning = true;
+            paused = false;
             score = 0;
+            comboLevel = 1;
+            obstaclesPassed = 0;
+            currentObstacleSpeed = BASE_OBSTACLE_SPEED;
+            nextObstacleFrames = BASE_SPAWN_DELAY;
+            frameCounter = 0;
             document.getElementById('score').innerText = score;
+            document.getElementById('combo').innerText = comboLevel;
             obstacles = [];
+            powerups = [];
             player.y = groundY;
             player.isJumping = false;
             player.ySpeed = 0;
-            frameCounter = 0;
-            nextObstacleFrames = 80;
+        }
+
+        function updateDifficulty() {
+            const select = document.getElementById('difficultySelect');
+            currentDifficulty = select.value;
+            const settings = difficultySettings[currentDifficulty];
+            BASE_OBSTACLE_SPEED = settings.baseSpeed;
+            BASE_SPAWN_DELAY = settings.baseSpawnDelay;
+            restartGame();
         }
 
         function jump() {
-            if (!gameRunning) return;
+            if (!gameRunning || paused) return;
             if (!player.isJumping && player.y >= groundY - 1) {
                 player.isJumping = true;
                 player.ySpeed = player.jumpPower;
             }
         }
 
-        function updateGame() {
+        function togglePause() {
             if (!gameRunning) return;
+            paused = !paused;
+        }
 
+        function updateGame() {
+            if (!gameRunning || paused) return;
+
+            // Difficulty scaling
+            currentObstacleSpeed = BASE_OBSTACLE_SPEED + (score * DIFFICULTY_SPEEDUP);
+            let currentSpawnDelay = Math.max(MIN_SPAWN_DELAY, BASE_SPAWN_DELAY - Math.floor(score / 150));
+
+            // Player physics
             if (player.isJumping) {
                 player.ySpeed += player.gravity;
                 player.y += player.ySpeed;
@@ -99,9 +203,20 @@
                 }
             }
 
+            // Obstacle movement & collision
             for (let i = 0; i < obstacles.length; i++) {
                 const obs = obstacles[i];
-                obs.x -= 5;
+                obs.x -= currentObstacleSpeed;
+                
+                // Check if obstacle passed the player (for combo counting)
+                if (!obs.counted && obs.x + obs.w < player.x) {
+                    obs.counted = true;
+                    obstaclesPassed++;
+                    if (obstaclesPassed % OBSTACLES_PER_COMBO === 0 && comboLevel < MAX_COMBO) {
+                        comboLevel++;
+                        document.getElementById('combo').innerText = comboLevel;
+                    }
+                }
 
                 if (!gameRunning) break;
                 if (player.x < obs.x + obs.w &&
@@ -109,30 +224,62 @@
                     player.y < obs.y + obs.h &&
                     player.y + player.height > obs.y) {
                     gameRunning = false;
-                    if (score > highScore) {
-                        highScore = score;
+                    let finalScore = Math.floor(score * comboLevel);
+                    if (finalScore > highScore) {
+                        highScore = finalScore;
                         localStorage.setItem('jumpHighScore', highScore);
                         document.getElementById('highScore').innerText = highScore;
                     }
+                    saveTopScores(finalScore);
+                }
+            }
+
+            // Powerup collection
+            for (let i = 0; i < powerups.length; i++) {
+                powerups[i].x -= currentObstacleSpeed;
+                if (!gameRunning) break;
+                if (player.x < powerups[i].x + 15 &&
+                    player.x + player.width > powerups[i].x &&
+                    player.y < powerups[i].y + 15 &&
+                    player.y + player.height > powerups[i].y) {
+                    let addScore = 10 * comboLevel;
+                    score += addScore;
+                    document.getElementById('score').innerText = Math.floor(score);
+                    powerups.splice(i,1);
+                    i--;
                 }
             }
 
             obstacles = obstacles.filter(obs => obs.x + obs.w > 0);
+            powerups = powerups.filter(p => p.x + 15 > 0);
 
+            // Spawn new obstacles and powerups
             if (gameRunning) {
                 frameCounter++;
-                if (frameCounter >= nextObstacleFrames) {
+                if (frameCounter >= currentSpawnDelay) {
                     frameCounter = 0;
-                    nextObstacleFrames = 50 + Math.floor(Math.random() * 60);
+                    let type = Math.random() > 0.7 ? 1 : 0;
+                    let obsH = (type === 1) ? 40 : 25;
+                    let obsY = groundY + 5 + (type === 1 ? -5 : 0);
                     obstacles.push({
                         x: canvas.width,
-                        y: groundY + 5,
+                        y: obsY,
                         w: 20,
-                        h: 25,
+                        h: obsH,
+                        type: type,
+                        counted: false
                     });
+                    if (Math.random() < 0.1) {
+                        powerups.push({
+                            x: canvas.width + 30,
+                            y: groundY - 5,
+                            type: 'star'
+                        });
+                    }
                 }
 
-                score += 0.2;
+                let add = SCORE_INCREASE_RATE * comboLevel;
+                score += add;
                 document.getElementById('score').innerText = Math.floor(score);
             }
         }
@@ -140,26 +287,68 @@
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
+            // Ground
             ctx.fillStyle = '#8B5A2B';
             ctx.fillRect(0, groundY + player.height, canvas.width, 5);
+            ctx.fillStyle = '#CD853F';
+            ctx.fillRect(0, groundY + player.height - 3, canvas.width, 3);
 
+            // Player
             ctx.fillStyle = '#2E7D32';
             ctx.fillRect(player.x, player.y, player.width, player.height);
             ctx.fillStyle = '#000';
             ctx.fillRect(player.x + 20, player.y + 8, 5, 5);
             ctx.fillRect(player.x + 8, player.y + 8, 5, 5);
 
-            ctx.fillStyle = '#D32F2F';
+            // Obstacles
             for (let obs of obstacles) {
+                if (obs.type === 1) {
+                    ctx.fillStyle = '#8B0000';
+                } else {
+                    ctx.fillStyle = '#D32F2F';
+                }
                 ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
             }
 
-            if (!gameRunning) {
+            // Stars
+            for (let p of powerups) {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(p.x + 8, p.y + 8, 8, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = '#FFA500';
+                ctx.beginPath();
+                ctx.arc(p.x + 8, p.y + 8, 4, 0, Math.PI*2);
+                ctx.fill();
+            }
+
+            if (comboLevel > 1) {
+                ctx.font = 'bold 20px Arial';
+                ctx.fillStyle = '#e67e22';
+                ctx.fillText(`x${comboLevel} COMBO!`, player.x - 20, player.y - 10);
+            }
+
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#666';
+            ctx.fillText(`Speed: ${currentObstacleSpeed.toFixed(1)}`, canvas.width - 70, 20);
+            ctx.fillText(`Combo progress: ${obstaclesPassed % OBSTACLES_PER_COMBO}/${OBSTACLES_PER_COMBO}`, canvas.width - 150, 40);
+
+            if (paused && gameRunning) {
+                ctx.font = '28px Arial';
+                ctx.fillStyle = '#333';
+                ctx.fillText('PAUSED', canvas.width/2 - 55, canvas.height/2);
+                ctx.font = '14px Arial';
+                ctx.fillText('Press P to resume', canvas.width/2 - 65, canvas.height/2 + 35);
+            } else if (!gameRunning) {
                 ctx.font = '24px Arial';
                 ctx.fillStyle = 'black';
                 ctx.fillText('GAME OVER', canvas.width/2 - 70, 80);
                 ctx.font = '16px Arial';
                 ctx.fillText('Click "Restart" to play again', canvas.width/2 - 110, 130);
+                let finalDisplay = Math.floor(score * comboLevel);
+                ctx.font = '18px Arial';
+                ctx.fillStyle = '#e67e22';
+                ctx.fillText(`Final Score: ${finalDisplay}`, canvas.width/2 - 70, 170);
             }
         }
 
@@ -169,6 +358,7 @@
             requestAnimationFrame(gameLoop);
         }
 
+        // Event listeners
         canvas.addEventListener('mousedown', (e) => {
             if (e.button === 0) {
                 e.preventDefault();
@@ -176,8 +366,23 @@
             }
         });
 
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                jump();
+            }
+            if (e.code === 'KeyP') {
+                e.preventDefault();
+                togglePause();
+            }
+        });
+
         document.getElementById('restartBtn').addEventListener('click', () => {
             restartGame();
+        });
+        
+        document.getElementById('difficultySelect').addEventListener('change', () => {
+            updateDifficulty();
         });
 
         restartGame();
