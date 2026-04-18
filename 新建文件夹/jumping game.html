@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jump Game - Dino Style</title>
+    <style>
+        body {
+            text-align: center;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f0f0f0;
+        }
+        canvas {
+            background: white;
+            border: 2px solid #333;
+            cursor: pointer;
+        }
+        #info {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        #restartBtn {
+            margin-top: 10px;
+            padding: 6px 16px;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <h2>🐸 Jump Game</h2>
+    <p>💡 Press <strong>Left Mouse Button</strong> to jump (avoid red obstacles)</p>
+    <canvas id="gameCanvas" width="800" height="300"></canvas>
+    <div id="info">
+        Score: <span id="score">0</span> &nbsp;&nbsp;
+        High Score: <span id="highScore">0</span>
+    </div>
+    <button id="restartBtn">Restart</button>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game state
+        let gameRunning = true;
+        let score = 0;
+        let highScore = localStorage.getItem('jumpHighScore') || 0;
+        document.getElementById('highScore').innerText = highScore;
+
+        // Player
+        const player = {
+            x: 80,
+            y: 230,
+            width: 30,
+            height: 30,
+            isJumping: false,
+            ySpeed: 0,
+            gravity: 0.8,
+            jumpPower: -12
+        };
+
+        // Obstacles
+        let obstacles = [];
+
+        // Obstacle spawn control
+        let frameCounter = 0;
+        let nextObstacleFrames = 80;
+
+        const groundY = 230;
+
+        function restartGame() {
+            gameRunning = true;
+            score = 0;
+            document.getElementById('score').innerText = score;
+            obstacles = [];
+            player.y = groundY;
+            player.isJumping = false;
+            player.ySpeed = 0;
+            frameCounter = 0;
+            nextObstacleFrames = 80;
+        }
+
+        function jump() {
+            if (!gameRunning) return;
+            if (!player.isJumping && player.y >= groundY - 1) {
+                player.isJumping = true;
+                player.ySpeed = player.jumpPower;
+            }
+        }
+
+        function updateGame() {
+            if (!gameRunning) return;
+
+            if (player.isJumping) {
+                player.ySpeed += player.gravity;
+                player.y += player.ySpeed;
+                if (player.y >= groundY) {
+                    player.y = groundY;
+                    player.isJumping = false;
+                    player.ySpeed = 0;
+                }
+            }
+
+            for (let i = 0; i < obstacles.length; i++) {
+                const obs = obstacles[i];
+                obs.x -= 5;
+
+                if (!gameRunning) break;
+                if (player.x < obs.x + obs.w &&
+                    player.x + player.width > obs.x &&
+                    player.y < obs.y + obs.h &&
+                    player.y + player.height > obs.y) {
+                    gameRunning = false;
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('jumpHighScore', highScore);
+                        document.getElementById('highScore').innerText = highScore;
+                    }
+                }
+            }
+
+            obstacles = obstacles.filter(obs => obs.x + obs.w > 0);
+
+            if (gameRunning) {
+                frameCounter++;
+                if (frameCounter >= nextObstacleFrames) {
+                    frameCounter = 0;
+                    nextObstacleFrames = 50 + Math.floor(Math.random() * 60);
+                    obstacles.push({
+                        x: canvas.width,
+                        y: groundY + 5,
+                        w: 20,
+                        h: 25,
+                    });
+                }
+
+                score += 0.2;
+                document.getElementById('score').innerText = Math.floor(score);
+            }
+        }
+
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#8B5A2B';
+            ctx.fillRect(0, groundY + player.height, canvas.width, 5);
+
+            ctx.fillStyle = '#2E7D32';
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 20, player.y + 8, 5, 5);
+            ctx.fillRect(player.x + 8, player.y + 8, 5, 5);
+
+            ctx.fillStyle = '#D32F2F';
+            for (let obs of obstacles) {
+                ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+            }
+
+            if (!gameRunning) {
+                ctx.font = '24px Arial';
+                ctx.fillStyle = 'black';
+                ctx.fillText('GAME OVER', canvas.width/2 - 70, 80);
+                ctx.font = '16px Arial';
+                ctx.fillText('Click "Restart" to play again', canvas.width/2 - 110, 130);
+            }
+        }
+
+        function gameLoop() {
+            updateGame();
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            if (e.button === 0) {
+                e.preventDefault();
+                jump();
+            }
+        });
+
+        document.getElementById('restartBtn').addEventListener('click', () => {
+            restartGame();
+        });
+
+        restartGame();
+        gameLoop();
+    </script>
+</body>
+</html>
