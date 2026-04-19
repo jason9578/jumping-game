@@ -127,5 +127,6 @@ No third\-party dependencies\. It is implemented based on native HTML5/CSS3/Java
 ## Declaration
 
 All codes, styles, and interaction logic of this project are independently developed, and no non\-self\-developed open\-source resources, third\-party libraries, or commercial plug\-ins are used\.
+<img width="829" height="478" alt="eac0ddce1834aaf1d8eb6bc25aa3b2a3" src="https://github.com/user-attachments/assets/828bd979-7ab4-4369-93c8-2ba32f2f3059" />
 
 
